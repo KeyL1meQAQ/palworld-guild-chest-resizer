@@ -1,5 +1,7 @@
 # Palworld Guild Chest Resizer
 
+[![tests](https://github.com/Leo927/palworld-guild-chest-resizer/actions/workflows/tests.yml/badge.svg)](https://github.com/Leo927/palworld-guild-chest-resizer/actions/workflows/tests.yml)
+
 Resize the Guild Chest in an **existing** Palworld save, keeping everything already
 stored in it. Works on Palworld **0.6+** saves, which most save editors cannot open.
 
@@ -133,8 +135,26 @@ file it wrote** to confirm both the new slot count and unchanged contents, backs
 your original to `backups/`, and only then installs. Any failure leaves your save
 untouched.
 
-Add `-y` to skip the prompt. `--container <id>` resizes one specific guild's chest on a
-multi-guild server; by default every guild chest is resized.
+Add `-y` to skip the prompt.
+
+**Multi-guild servers:** by default *every* guild's chest is resized. Guilds that have
+not built a chest yet are skipped, because the container does not exist in the save
+until they do — they will get the vanilla 54 when they build one. Use
+`--container <id>` (from `list`) to resize a single guild instead.
+
+If the new size would strand items, the tool reports **every** affected guild at once
+and writes nothing, so you are not fixing them one re-run at a time:
+
+```
+REFUSING: 10 slots would strand items already in the chest.
+
+  guild c4f85b2a-4a61-c738-8162-6d9b8e98759a
+    container 51551d22-4f25-8d2b-1b19-91a5fe44f6cf
+    104 items, highest slot index 103
+
+Use more than 103 slots, or move those items out of the affected chests.
+Nothing was written.
+```
 
 ### 5. Start the game and open the chest
 
@@ -206,6 +226,20 @@ For anyone who wants to verify the approach rather than trust it:
 
 Because capacity and stored slots are decoupled, resizing is one integer and no item
 data is touched.
+
+## Development
+
+The chest logic is pure functions over save-shaped dictionaries, so the tests need no
+save file, no network and no libooz:
+
+```powershell
+.\venv\Scripts\python.exe -m unittest discover -p "test_*.py" -v
+```
+
+The same command runs in CI on Linux and Windows across Python 3.9 and 3.12. Coverage
+includes the multi-guild and `--container` paths, the shrink guard and its exact
+boundary, guilds with no chest built, saves with no guilds at all, and the FGuid and
+slot decoders against a known vector from a real save.
 
 ### Verification done on this approach
 

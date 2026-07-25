@@ -179,10 +179,40 @@ def print_survey(data, show_items=True):
         print()
 
 
+class UnsafeShrink(Exception):
+    """Raised when the requested slot count would strand items in unreachable slots."""
+
+    def __init__(self, offenders, new_slots):
+        self.offenders = offenders
+        self.new_slots = new_slots
+        super().__init__(self.message())
+
+    def message(self):
+        worst = max(o["max_index"] for o in self.offenders)
+        lines = [
+            f"REFUSING: {self.new_slots} slots would strand items already in the chest.",
+            "",
+        ]
+        for o in self.offenders:
+            lines.append(
+                f"  guild {o['guild']}"
+                f"\n    container {o['container_id']}"
+                f"\n    {o['occupied']} items, highest slot index {o['max_index']}"
+            )
+        lines += [
+            "",
+            f"Use more than {worst} slots, or move those items out of the affected chests.",
+            "Nothing was written.",
+        ]
+        return "\n".join(lines)
+
+
 def apply_slot_count(wsd, new_slots, container_filter=None):
+    """Set SlotNum on every guild chest (or just container_filter). All-or-nothing."""
     containers = containers_by_id(wsd)
-    changed = []
-    for container_id in guild_storage_container_ids(wsd).values():
+    targets, offenders = [], []
+
+    for guild_id, container_id in guild_storage_container_ids(wsd).items():
         if container_filter and container_id != container_filter:
             continue
         container = containers.get(container_id)
@@ -196,11 +226,24 @@ def apply_slot_count(wsd, new_slots, container_filter=None):
         # Slots are stored sparsely by index. Shrinking to at or below the highest
         # occupied index would strand real items in slots the chest cannot address.
         if new_slots <= max_index:
-            sys.exit(
-                f"REFUSING: container {container_id} has an item at slot index {max_index}.\n"
-                f"Slot count must be greater than {max_index}; you asked for {new_slots}.\n"
-                "Move those items out of the chest first, or pick a larger number."
+            offenders.append(
+                {
+                    "guild": guild_id,
+                    "container_id": container_id,
+                    "max_index": max_index,
+                    "occupied": sum(1 for d in decoded if d[2]),
+                }
             )
+            continue
+        targets.append((container_id, container))
+
+    # Every guild is checked before anything is modified, so one over-full chest
+    # reports alongside the others instead of hiding them behind an early exit.
+    if offenders:
+        raise UnsafeShrink(offenders, new_slots)
+
+    changed = []
+    for container_id, container in targets:
         old = container["SlotNum"]["value"]
         container["SlotNum"]["value"] = new_slots
         changed.append((container_id, old, new_slots))
@@ -336,7 +379,10 @@ def cmd_resize(args):
         if reply not in ("y", "yes"):
             sys.exit("Aborted; nothing written.")
 
-    changed = apply_slot_count(wsd, args.slots, args.container)
+    try:
+        changed = apply_slot_count(wsd, args.slots, args.container)
+    except UnsafeShrink as exc:
+        sys.exit(str(exc))
     if not changed:
         sys.exit("No matching guild chest container; nothing written.")
     for container_id, old, new in changed:
