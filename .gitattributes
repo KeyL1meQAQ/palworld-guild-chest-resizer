@@ -1,0 +1,11 @@
+# Shell scripts must keep LF or Linux refuses them with "bad interpreter: ...^M".
+*.sh    text eol=lf
+*.py    text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+
+# PowerShell is happiest with CRLF on Windows.
+*.ps1   text eol=crlf
+
+*.dll   binary
+*.sav   binary

@@ -1,0 +1,14 @@
+venv/
+backups/
+__pycache__/
+*.pyc
+
+# Never commit this: zao/ooz publishes no license, so the binary must not be
+# redistributed. setup.ps1 / fetch_ooz.py pull it from upstream instead. See NOTICE.md.
+ooz/
+
+# Save files and any staged intermediates
+*.sav
+*.sav.new
+*.sav.json
+Level.json
